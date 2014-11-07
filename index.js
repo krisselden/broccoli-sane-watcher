@@ -1,9 +1,15 @@
 var fs             = require('fs');
 var path           = require('path');
 var EventEmitter   = require('events').EventEmitter;
-var sane           = require('sane');
+try {
+  var fsevents = require('fsevents');
+  console.log('watching with: fsevents');
+} catch(e) {
+  console.log('watching with: sane');
+  var sane = require('sane');
+}
 var Promise        = require('rsvp').Promise;
-var printSlowTrees = require('broccoli-slow-trees');
+var printSlowTrees = require('broccoli/lib/logging').printSlowTrees;
 
 module.exports = Watcher;
 function Watcher(builder, options) {
@@ -12,14 +18,12 @@ function Watcher(builder, options) {
   this.watched = {};
   this.timeout = null;
   this.sequence = this.build();
-  this.changes = [];
 }
 
 Watcher.prototype = Object.create(EventEmitter.prototype);
 
 // gathers rapid changes as one build
 Watcher.prototype.scheduleBuild = function (filePath) {
-  this.changes.push(filePath);
   if (this.timeout) return;
 
   // we want the timeout to start now before we wait for the current build
@@ -50,10 +54,8 @@ Watcher.prototype.build = function Watcher_build(filePath) {
     .build(addWatchDir)
     .then(function(hash) {
       hash.filePath = filePath;
-      hash.changes = this.changes;
-      this.changes = [];
       return triggerChange(hash);
-    }.bind(this), triggerError)
+    }, triggerError)
     .then(function(run) {
       if (this.options.verbose) {
         printSlowTrees(run.graph);
@@ -63,6 +65,38 @@ Watcher.prototype.build = function Watcher_build(filePath) {
     }.bind(this));
 };
 
+
+Watcher.prototype._saneWatcher = function(dir) {
+  var watcher = new sane.Watcher(dir, {
+    poll: !!this.options.poll
+  });
+
+  watcher.on('change', function(filePath,root) {
+    this.onFileChanged(path.join(filePath, root));
+  }.bind(this));
+
+  watcher.on('create', function(filePath,root) {
+    this.onFileAdded(path.join(filePath, root));
+  }.bind(this));
+
+  watcher.on('delete', function(filePath, root) {
+    this.onFileDeleted(path.join(filePath, root));
+  });
+
+  return watcher;
+};
+
+Watcher.prototype._fsevents = function(dir) {
+  var watcher = fsevents(dir);
+
+  watcher.on('change', this.onFileChanged.bind(this));
+  watcher.on('created', this.onFileAdded.bind(this));
+  watcher.on('deleted', this.onFileDeleted.bind(this));
+  watcher.start();
+
+  return watcher;
+};
+
 Watcher.prototype.addWatchDir = function Watcher_addWatchDir(dir) {
   if (this.watched[dir]) return;
 
@@ -70,29 +104,28 @@ Watcher.prototype.addWatchDir = function Watcher_addWatchDir(dir) {
     throw new Error('Attempting to watch missing directory: ' + dir);
   }
 
-  var watcher = new sane.Watcher(dir, {
-    poll: !!this.options.poll
-  });
+  if (fsevents) {
+    watcher = this._fsevents(dir);
+  } else {
+    watcher = this._saneWatcher(dir);
+  }
 
-  watcher.on('change', this.onFileChanged.bind(this));
-  watcher.on('add', this.onFileAdded.bind(this));
-  watcher.on('delete', this.onFileDeleted.bind(this));
   this.watched[dir] = watcher;
 };
 
 Watcher.prototype.onFileChanged = function (filePath, root) {
   if (this.options.verbose) console.log('file changed', filePath);
-  this.scheduleBuild(path.join(root, filePath));
+  this.scheduleBuild(filePath);
 };
 
 Watcher.prototype.onFileAdded = function (filePath, root) {
   if (this.options.verbose) console.log('file added', filePath);
-  this.scheduleBuild(path.join(root, filePath));
+  this.scheduleBuild(filePath);
 };
 
 Watcher.prototype.onFileDeleted = function (filePath, root) {
   if (this.options.verbose) console.log('file deleted', filePath);
-  this.scheduleBuild(path.join(root, filePath));
+  this.scheduleBuild(filePath);
 };
 
 Watcher.prototype.triggerChange = function (hash) {
@@ -108,11 +141,11 @@ Watcher.prototype.triggerError = function (error) {
 Watcher.prototype.close = function () {
   clearTimeout(this.timeout);
   var watched = this.watched;
-  for (var dir in watched) {
-    if (!watched.hasOwnProperty(dir)) continue;
-    watched[dir].close();
+  Object.keys(watched).forEach(function(dir) {
+    var watcher = watched[dir];
+    watcher.close ? watcher.close() : watcher.stop();
     delete watched[dir];
-  }
+  });
 };
 
 Watcher.prototype.then = function(success, fail) {
