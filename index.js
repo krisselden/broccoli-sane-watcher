@@ -91,12 +91,16 @@ Watcher.prototype.addWatchDir = function Watcher_addWatchDir(dir) {
   }
 
   var watcher = new sane(dir, this.options);
+  this.watched[dir] = watcher;
 
   watcher.on('change', this.onFileChanged.bind(this));
   watcher.on('add', this.onFileAdded.bind(this));
   watcher.on('delete', this.onFileDeleted.bind(this));
 
-  this.watched[dir] = watcher;
+  return new Promise(function(resolve, reject) {
+    watcher.on('error', reject);
+    watcher.on('ready', resolve);
+  });
 };
 
 function makeOnChanged (log) {
