@@ -5,6 +5,7 @@ var sane           = require('sane');
 var Promise        = require('rsvp').Promise;
 var printSlowTrees = require('broccoli-slow-trees');
 var debug          = require('debug')('broccoli-sane-watcher');
+var heimdall       = require('heimdalljs');
 
 function defaultFilterFunction(name) {
   return /^[^\.]/.test(name);
@@ -60,7 +61,7 @@ Watcher.prototype.build = function Watcher_build(filePath) {
 
   function verboseOutput(run) {
     if (this.options.verbose) {
-      printSlowTrees(run.graph);
+      printSlowTrees(heimdall);
     }
 
     return run;
