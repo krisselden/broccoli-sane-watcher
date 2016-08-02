@@ -1,6 +1,6 @@
 {
   "name": "broccoli-sane-watcher",
-  "version": "1.1.4",
+  "version": "2.0.0",
   "description": "Alternative watcher that uses sane module instead of polling",
   "main": "index.js",
   "scripts": {
@@ -22,8 +22,9 @@
   },
   "homepage": "https://github.com/broccolijs/broccoli-sane-watcher",
   "dependencies": {
-    "broccoli-slow-trees": "^1.1.0",
+    "broccoli-slow-trees": "^3.0.0",
     "debug": "^2.1.0",
+    "heimdalljs": "^0.1.2",
     "rsvp": "^3.0.18",
     "sane": "^1.1.1"
   },
