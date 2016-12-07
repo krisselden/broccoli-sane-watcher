@@ -39,6 +39,22 @@ describe('broccoli-sane-watcher', function (done) {
     });
   });
 
+  it('should pass watchman option to sane', function () {
+    fs.mkdirSync('tests/fixtures/a');
+    var filter = new TestFilter(['tests/fixtures/a'], function () {
+      return 'output';
+    });
+    var builder = new broccoli.Builder(filter);
+
+    watcher = new Watcher(builder, {
+      watchman: true
+    });
+
+    return watcher.sequence.then(function () {
+      assert.ok(watcher.watched['tests/fixtures/a'] instanceof sane.WatchmanWatcher);
+    });
+  });
+
   it('should emit change event when file is added', function (done) {
     fs.mkdirSync('tests/fixtures/a');
 
